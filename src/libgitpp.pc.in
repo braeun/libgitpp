@@ -1,0 +1,6 @@
+Name: ${PROJECT_NAME}
+Description: The gitpp Library
+Version: ${PROJECT_VERSION}
+Libs: -L${CMAKE_INSTALL_FULL_LIBDIR} -lgitpp -lgit2
+Cflags: -I${CMAKE_INSTALL_FULL_INCLUDEDIR}
+
