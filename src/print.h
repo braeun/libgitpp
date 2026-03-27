@@ -6,11 +6,11 @@
 
 namespace libgitpp {
 
+class Repository;
+
 namespace print {
 
-extern std::string toString(const git_time *intime);
-
-extern std::string toString(git_commit *commit, bool showLogSize);
+extern std::string log(Repository* repo, std::string rev="");
 
 }
 

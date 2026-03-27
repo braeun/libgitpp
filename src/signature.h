@@ -2,12 +2,13 @@
 #define SIGNATURE_H
 
 #include "gittime.h"
+#include "libgitpp_global.h"
 #include <git2/signature.h>
 #include <string>
 
 namespace libgitpp {
 
-class Signature
+class LIBGITPP_EXPORT Signature
 {
 public:
   Signature(git_signature* sig);

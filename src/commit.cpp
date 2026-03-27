@@ -14,7 +14,7 @@ Commit::~Commit()
   git_commit_free(commit);
 }
 
-const git_oid* Commit::getId()
+OID Commit::getId()
 {
   return git_commit_id(commit);
 }
@@ -50,7 +50,7 @@ int Commit::getParentCount() const
   return git_commit_parentcount(commit);
 }
 
-const git_oid* Commit::getParentId(unsigned int index)
+OID Commit::getParentId(unsigned int index)
 {
   return git_commit_parent_id(commit,index);
 }
@@ -77,7 +77,7 @@ std::string Commit::toString() const
   if (sig)
   {
     s << "Author: " << sig->getName() << " <" << sig->getEmail() << ">" << std::endl;
-    s << "Date: " << sig->getTime().toString();
+    s << "Date: " << sig->getTime().toString() << std::endl;
   }
   s << std::endl;
   std::string msg = git_commit_message(commit);

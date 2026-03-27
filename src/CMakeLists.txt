@@ -1,11 +1,14 @@
 
 add_library(gitpp SHARED
+  branch.cpp
   commit.cpp
   diff.cpp
   gittime.cpp
   index.cpp
   indexentry.cpp
+  oid.cpp
   print.cpp
+  reference.cpp
   repository.cpp
   revwalk.cpp
   signature.cpp
@@ -14,13 +17,16 @@ add_library(gitpp::gitpp ALIAS gitpp)
 
 target_sources(gitpp PUBLIC
   FILE_SET HEADERS TYPE HEADERS BASE_DIRS "${CMAKE_CURRENT_SOURCE_DIR}" "${CMAKE_CURRENT_BINARY_DIR}" FILES
+  branch.h
   commit.h
   diff.h
   gittime.h
   index.h
   indexentry.h
   libgitpp_global.h
+  oid.h
   print.h
+  reference.h
   repository.h
   revwalk.h
   signature.h

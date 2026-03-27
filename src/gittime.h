@@ -1,12 +1,13 @@
 #ifndef LIBGIT_TIME_H
 #define LIBGIT_TIME_H
 
+#include "libgitpp_global.h"
 #include <git2/types.h>
 #include <string>
 
 namespace libgitpp {
 
-class GitTime
+class LIBGITPP_EXPORT GitTime
 {
 public:
   GitTime(git_time t);

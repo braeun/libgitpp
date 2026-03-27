@@ -40,9 +40,9 @@ std::string GitTime::toString()
   char out[32];
   strftime(out, sizeof(out), "%a %b %e %T %Y", intm);
   std::ostringstream s;
-  s << out << sign;
-  s << std::setw(2) << std::setfill('0');
-  s << hours << minutes;
+  s << out << " " << sign;
+  s << std::setw(2) << std::setfill('0') << hours;
+  s << std::setw(2) << std::setfill('0') << minutes;
   return s.str();
 }
 

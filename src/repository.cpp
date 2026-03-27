@@ -1,4 +1,5 @@
 #include "repository.h"
+#include "branch.h"
 #include "commit.h"
 #include "diff.h"
 #include "index.h"
@@ -7,6 +8,7 @@
 #include <git2/commit.h>
 #include <git2/errors.h>
 #include <git2/global.h>
+#include <git2/refs.h>
 #include <git2/revparse.h>
 #include <git2/signature.h>
 #include <git2/status.h>
@@ -91,10 +93,10 @@ std::unique_ptr<RevWalk> Repository::getRevWalker()
   return std::make_unique<RevWalk>(walker);
 }
 
-std::unique_ptr<Commit> Repository::getCommit(git_oid oid)
+std::unique_ptr<Commit> Repository::getCommit(const OID& oid)
 {
   git_commit* commit;
-  int err = git_commit_lookup(&commit,repo,&oid);
+  int err = git_commit_lookup(&commit,repo,oid.raw());
   if (err != GIT_OK)
   {
     auto err = git_error_last();
@@ -248,9 +250,153 @@ bool Repository::commit(const std::string& comment, const Signature* sig)
   return true;
 }
 
-git_repository* Repository::raw()
+std::vector<std::unique_ptr<Branch>> Repository::getBranches(git_branch_t type)
+{
+  std::vector<std::unique_ptr<Branch>> list;
+  git_branch_iterator* it;
+  int err = git_branch_iterator_new(&it,repo,type);
+  while (err == GIT_OK)
+  {
+    git_reference* ref;
+    git_branch_t type;
+    err = git_branch_next(&ref,&type,it);
+    if (err == GIT_OK)
+    {
+      list.push_back(std::make_unique<Branch>(ref,type));
+    }
+  }
+  git_branch_iterator_free(it);
+  if (err != GIT_ITEROVER)
+  {
+    auto err = git_error_last();
+    throw std::runtime_error(err->message);
+  }
+  return list;
+}
+
+bool Repository::checkout(const std::string& refish, bool force)
+{
+  git_repository_state_t state = (git_repository_state_t)git_repository_state(repo);
+  if (state != GIT_REPOSITORY_STATE_NONE)
+  {
+    throw std::runtime_error("repository is in unexpected state "+std::to_string(state));
+  }
+  git_annotated_commit *target = nullptr;
+  int err = resolve_refish(&target,refish);
+  if (err != GIT_OK)
+  {
+    auto err = git_error_last();
+    throw std::runtime_error(err->message);
+  }
+  git_checkout_options checkout_opts = GIT_CHECKOUT_OPTIONS_INIT;
+  checkout_opts.checkout_strategy = GIT_CHECKOUT_SAFE;
+  if (force) checkout_opts.checkout_strategy = GIT_CHECKOUT_FORCE;
+
+  /** Grab the commit we're interested to move to */
+  git_commit *target_commit = nullptr;
+  err = git_commit_lookup(&target_commit, repo, git_annotated_commit_id(target));
+  if (err != 0)
+  {
+    git_annotated_commit_free(target);
+    auto err = git_error_last();
+    throw std::runtime_error(err->message);
+  }
+
+  /**
+   * Perform the checkout so the workdir corresponds to what target_commit
+   * contains.
+   *
+   * Note that it's okay to pass a git_commit here, because it will be
+   * peeled to a tree.
+   */
+  err = git_checkout_tree(repo,(const git_object *)target_commit,&checkout_opts);
+  if (err != 0)
+  {
+    git_annotated_commit_free(target);
+    git_commit_free(target_commit);
+    auto err = git_error_last();
+    throw std::runtime_error(err->message);
+  }
+
+  /**
+   * Now that the checkout has completed, we have to update HEAD.
+   *
+   * Depending on the "origin" of target (ie. it's an OID or a branch name),
+   * we might need to detach HEAD.
+   */
+  if (git_annotated_commit_ref(target))
+  {
+    git_reference *ref = nullptr;
+    if (git_reference_lookup(&ref, repo, git_annotated_commit_ref(target)) < 0)
+    {
+      git_annotated_commit_free(target);
+      git_commit_free(target_commit);
+      auto err = git_error_last();
+      throw std::runtime_error(err->message);
+    }
+    const char *target_head;
+    if (git_reference_is_remote(ref))
+    {
+      git_reference *branch = nullptr;
+      if (git_branch_create_from_annotated(&branch, repo, refish.c_str(), target, 0) < 0)
+      {
+        git_annotated_commit_free(target);
+        git_commit_free(target_commit);
+        git_reference_free(ref);
+        auto err = git_error_last();
+        throw std::runtime_error(err->message);
+      }
+      target_head = git_reference_name(branch);
+      git_reference_free(branch);
+    }
+    else
+    {
+      target_head = git_annotated_commit_ref(target);
+    }
+    git_reference_free(ref);
+    err = git_repository_set_head(repo, target_head);
+  }
+  else
+  {
+    err = git_repository_set_head_detached_from_annotated(repo, target);
+  }
+  git_annotated_commit_free(target);
+  git_commit_free(target_commit);
+
+  if (err != GIT_OK)
+  {
+    auto err = git_error_last();
+    throw std::runtime_error(err->message);
+  }
+  return true;
+}
+
+git_repository* Repository::raw() const
 {
   return repo;
+}
+
+
+int Repository::resolve_refish(git_annotated_commit **commit, const std::string& refish)
+{
+  git_reference *ref;
+  int err = git_reference_dwim(&ref,repo,refish.c_str());
+  if (err == GIT_OK)
+  {
+    git_annotated_commit_from_ref(commit, repo, ref);
+    git_reference_free(ref);
+    return 0;
+  }
+
+  git_object *obj;
+  err = git_revparse_single(&obj,repo,refish.c_str());
+  if (err == GIT_OK)
+  {
+    err = git_annotated_commit_lookup(commit, repo, git_object_id(obj));
+    git_object_free(obj);
+  }
+
+  return err;
 }
 
 

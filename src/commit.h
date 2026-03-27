@@ -2,6 +2,8 @@
 #define COMMIT_H
 
 #include "gittime.h"
+#include "libgitpp_global.h"
+#include "oid.h"
 #include <git2/commit.h>
 #include <memory>
 #include <string>
@@ -10,13 +12,13 @@ namespace libgitpp {
 
 class Signature;
 
-class Commit
+class LIBGITPP_EXPORT Commit
 {
 public:
   Commit(git_commit *commit);
   ~Commit();
 
-  const git_oid* getId();
+  OID getId();
 
   std::string getMessage() const;
 
@@ -28,7 +30,7 @@ public:
 
   int getParentCount() const;
 
-  const git_oid* getParentId(unsigned int index);
+  OID getParentId(unsigned int index);
 
   std::string toString() const;
 

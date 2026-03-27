@@ -22,7 +22,7 @@ void RevWalk::setSorting(int flags)
   git_revwalk_sorting(walker,flags);
 }
 
-void RevWalk::addRevision(const std::string& rev)
+void RevWalk::addRevision(const std::string& rev, bool mergeBase)
 {
   git_revspec revs;
   bool hide = false;
@@ -33,6 +33,7 @@ void RevWalk::addRevision(const std::string& rev)
     return;
   }
 
+  revs.flags = (revs.flags & ~GIT_REVSPEC_MERGE_BASE) | (mergeBase?GIT_REVSPEC_MERGE_BASE:0);
   if (rev[0] == '^')
   {
     revs.flags = GIT_REVSPEC_SINGLE;
@@ -73,9 +74,14 @@ void RevWalk::reset()
   git_revwalk_reset(walker);
 }
 
-bool RevWalk::getNext(git_oid* oid)
+OID RevWalk::getNext()
 {
-  return git_revwalk_next(oid,walker) == 0;
+  git_oid oid;
+  if (git_revwalk_next(&oid,walker) == 0)
+  {
+    return OID(oid);
+  }
+  return OID();
 }
 
 // void RevWalk::push(git_object* obj)
