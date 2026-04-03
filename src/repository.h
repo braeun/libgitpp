@@ -3,7 +3,9 @@
 
 #include "oid.h"
 #include "libgitpp_global.h"
+#include <git2/credential.h>
 #include <git2/repository.h>
+#include <functional>
 #include <string>
 #include <memory>
 #include <vector>
@@ -15,8 +17,19 @@ class Branch;
 class Commit;
 class Diff;
 class Index;
+class Reference;
 class RevWalk;
 class Signature;
+
+/**
+ * @brief Callback to query credentials from user.
+ *
+ * The function is passed a vector of strings indicating what information is
+ * required and a vector of string with the default values. The function must
+ * return the rquired data as a vector of strings in the same order the
+ * vectors passed as arguments.
+ */
+typedef std::function<std::vector<std::string>(const std::vector<std::string>&, const std::vector<std::string>&)> CredentialsCallback;
 
 class LIBGITPP_EXPORT Repository
 {
@@ -33,6 +46,8 @@ public:
 
   std::unique_ptr<RevWalk> getRevWalker();
 
+  std::unique_ptr<Reference> getHead();
+
   std::unique_ptr<Commit> getCommit(const OID& oid);
 
   std::unique_ptr<Index> getIndex();
@@ -47,15 +62,25 @@ public:
 
   bool checkout(const std::string& branch, bool force=false);
 
+  std::unique_ptr<Branch> createBranch(const std::string& name, bool checkout=false);
+
+  void push();
+
   git_repository* raw() const;
+
+  static void setCredentialsCallback(const CredentialsCallback& cb);
 
 private:
   Repository(std::string path);
   Repository(git_repository* repo);
   int resolve_refish(git_annotated_commit **commit, const std::string& refish);
 
+  static int cred_acquire_cb(git_credential **out, const char *url, const char *username_from_url, unsigned int allowed_types, void *payload);
+
   std::string path;
   git_repository* repo;
+
+  static CredentialsCallback credentialCallback;
 };
 
 } // namespace

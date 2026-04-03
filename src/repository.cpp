@@ -5,18 +5,15 @@
 #include "index.h"
 #include "revwalk.h"
 #include "signature.h"
-#include <git2/commit.h>
-#include <git2/errors.h>
-#include <git2/global.h>
-#include <git2/refs.h>
-#include <git2/revparse.h>
-#include <git2/signature.h>
-#include <git2/status.h>
-#include <stdexcept>
 #include <git2.h>
+#include <iostream>
+#include <stdexcept>
+#include <string.h>
 
 namespace libgitpp
 {
+
+CredentialsCallback Repository::credentialCallback = nullptr;
 
 Repository::Repository(std::string path):
   path(path),
@@ -91,6 +88,19 @@ std::unique_ptr<RevWalk> Repository::getRevWalker()
     throw std::runtime_error(err->message);
   }
   return std::make_unique<RevWalk>(walker);
+}
+
+std::unique_ptr<Reference> Repository::getHead()
+{
+  git_reference* ref;
+  int err = git_repository_head(&ref,repo);
+  if (err != GIT_OK)
+  {
+    auto err = git_error_last();
+    throw std::runtime_error(err->message);
+  }
+  return std::make_unique<Reference>(ref);
+
 }
 
 std::unique_ptr<Commit> Repository::getCommit(const OID& oid)
@@ -371,10 +381,150 @@ bool Repository::checkout(const std::string& refish, bool force)
   return true;
 }
 
+std::unique_ptr<Branch> Repository::createBranch(const std::string& name, bool chkout)
+{
+  auto head = getHead();
+  git_annotated_commit *target = nullptr;
+  int err = resolve_refish(&target,head->getName());
+  if (err != GIT_OK)
+  {
+    auto err = git_error_last();
+    throw std::runtime_error(err->message);
+  }
+  /** Grab the commit we're interested to move to */
+  git_commit *target_commit = nullptr;
+  err = git_commit_lookup(&target_commit, repo, git_annotated_commit_id(target));
+  git_annotated_commit_free(target);
+  if (err != 0)
+  {
+    auto err = git_error_last();
+    throw std::runtime_error(err->message);
+  }
+  git_reference* ref;
+  err = git_branch_create(&ref,repo,name.c_str(),target_commit,0);
+  if (err != 0)
+  {
+    git_annotated_commit_free(target);
+    auto err = git_error_last();
+    throw std::runtime_error(err->message);
+  }
+  git_commit_free(target_commit);
+  if (chkout)
+  {
+    checkout(name);
+  }
+  return std::make_unique<Branch>(ref,GIT_BRANCH_LOCAL);
+}
+
+int Repository::cred_acquire_cb(git_credential **out, const char *url, const char *username_from_url, unsigned int allowed_types, void *payload)
+{
+  std::cout << "cred_acquire_cb" << std::endl;
+
+  if (!credentialCallback) return 1;
+
+//  int err = git_credential_userpass_plaintext_new(out, "", "");
+//  char *username = NULL, *password = NULL, *privkey = NULL, *pubkey = NULL;
+//   int error = 1;
+
+  std::string username;
+  if (username_from_url)
+  {
+    username = username_from_url;
+  }
+  std::vector<std::string> params;
+  std::vector<std::string> defs;
+  params.push_back("Username:");
+  defs.push_back(username);
+  if (allowed_types & GIT_CREDENTIAL_SSH_KEY)
+  {
+    params.push_back("SSH Key:");
+    defs.push_back("");
+    params.push_back("Password:");
+    defs.push_back("");
+  }
+  else if (allowed_types & GIT_CREDENTIAL_USERPASS_PLAINTEXT)
+  {
+    params.push_back("Password:");
+    defs.push_back("");
+  }
+  std::vector<std::string> values = credentialCallback(params,defs);
+  if (values.empty()) return 1;
+  int err = 1;
+  if (allowed_types & GIT_CREDENTIAL_SSH_KEY)
+  {
+    err = git_credential_ssh_key_new(out,values[0].c_str(),(values[1]+".pub").c_str(),values[1].c_str(),values[2].c_str());
+  }
+  else if (allowed_types & GIT_CREDENTIAL_USERPASS_PLAINTEXT)
+  {
+    err = git_credential_userpass_plaintext_new(out,values[0].c_str(),values[1].c_str());
+  }
+  else if (allowed_types & GIT_CREDENTIAL_USERNAME)
+  {
+    err = git_credential_username_new(out,values[0].c_str());
+  }
+  return err;
+}
+
+
+void Repository::push()
+{
+  int err;
+  auto head = getHead();
+  std::cout << "push head: " << head->getName() << std::endl;
+  git_remote_callbacks callbacks;
+  err = git_remote_init_callbacks(&callbacks, GIT_REMOTE_CALLBACKS_VERSION);
+  if (err != 0)
+  {
+    auto err = git_error_last();
+    throw std::runtime_error(err->message);
+  }
+  callbacks.credentials = cred_acquire_cb;
+  git_push_options options;
+  err = git_push_options_init(&options, GIT_PUSH_OPTIONS_VERSION);
+  options.callbacks = callbacks;
+  options.follow_redirects = GIT_REMOTE_REDIRECT_ALL;
+  if (err != 0)
+  {
+    auto err = git_error_last();
+    throw std::runtime_error(err->message);
+  }
+  git_remote* remote = nullptr;
+  err = git_remote_lookup(&remote,repo,"origin");
+  if (err != 0)
+  {
+    auto err = git_error_last();
+    throw std::runtime_error(err->message);
+  }
+  char* s = strdup(head->getName().c_str());
+  char *refspec = s;//"refs/heads/master";
+  const git_strarray refspecs = {
+    &refspec,
+    1
+  };
+  err = git_remote_push(remote, &refspecs, &options);
+//      err = git_remote_push(remote, nullptr, &options);
+  if (err != 0)
+  {
+    auto err = git_error_last();
+    free(s);
+    git_remote_free(remote);
+    throw std::runtime_error(err->message);
+  }
+  free(s);
+  git_remote_free(remote);
+}
+
 git_repository* Repository::raw() const
 {
   return repo;
 }
+
+
+void Repository::setCredentialsCallback(const CredentialsCallback& cb)
+{
+  credentialCallback = cb;
+}
+
 
 
 int Repository::resolve_refish(git_annotated_commit **commit, const std::string& refish)
