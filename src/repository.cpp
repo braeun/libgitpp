@@ -481,8 +481,20 @@ int Repository::cred_acquire_cb(git_credential **out, const char *url, const cha
 void Repository::push()
 {
   int err;
-  auto head = getHead();
-  std::cout << "push head: " << head->getName() << std::endl;
+  auto head = getHead()->asBranch();
+  if (!head)
+  {
+    throw std::runtime_error("Head is not a branch!");
+  }
+  std::cout << "push head: " << head->getName() << " " << head->isBranch() << std::endl;
+  auto b = head->getUpstreamBranch();
+  std::string upstreamName = "origin";
+  if (b)
+  {
+    upstreamName = b->getName();
+  }
+//  std::string upstreamName = head->asBranch()->getUpstreamBranchName();
+  std::cout << "upstream name " << upstreamName << std::endl;
   git_remote_callbacks callbacks;
   err = git_remote_init_callbacks(&callbacks, GIT_REMOTE_CALLBACKS_VERSION);
   if (err != 0)
@@ -500,14 +512,20 @@ void Repository::push()
     auto err = git_error_last();
     throw std::runtime_error(err->message);
   }
+  std::string remoteName = upstreamName;
+  size_t pos = upstreamName.find('/');
+  if (pos != upstreamName.npos)
+  {
+    remoteName = upstreamName.substr(0,pos);
+  }
   git_remote* remote = nullptr;
-  err = git_remote_lookup(&remote,repo,"origin");
+  err = git_remote_lookup(&remote,repo,remoteName.c_str());
   if (err != 0)
   {
     auto err = git_error_last();
     throw std::runtime_error(err->message);
   }
-  char* s = strdup(head->getName().c_str());
+  char* s = strdup(head->Reference::getName().c_str());
   char *refspec = s;//"refs/heads/master";
   const git_strarray refspecs = {
     &refspec,
@@ -525,7 +543,7 @@ void Repository::push()
   if (logCallback)
   {
     std::ostringstream os;
-    os << "pushed " << refspec << " -> " << git_remote_name(remote);
+    os << "pushed " << head->getName() << " -> " << upstreamName << " @ " << git_remote_url(remote);
     logCallback(os.str());
   }
   free(s);

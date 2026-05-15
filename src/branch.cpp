@@ -49,7 +49,7 @@ std::string Branch::getUpstreamBranchName() const
   if (type == GIT_BRANCH_LOCAL)
   {
     git_buf buf GIT_BUF_INIT;
-    int err = git_branch_upstream_name(&buf,git_reference_owner(ref),getName().c_str());
+    int err = git_branch_upstream_name(&buf,git_reference_owner(ref),Reference::getName().c_str());
     if (err == GIT_OK)
     {
       std::string s = buf.ptr;

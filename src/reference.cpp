@@ -46,7 +46,7 @@ std::unique_ptr<Branch> Reference::asBranch() const
     git_reference_dup(&r,ref);
     return std::make_unique<Branch>(r,GIT_BRANCH_LOCAL);
   }
-  else if (isBranch())
+  else if (isRemote())
   {
     git_reference *r;
     git_reference_dup(&r,ref);
