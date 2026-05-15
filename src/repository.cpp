@@ -7,13 +7,15 @@
 #include "signature.h"
 #include <git2.h>
 #include <iostream>
+#include <sstream>
 #include <stdexcept>
-#include <string.h>
+#include <cstring>
 
 namespace libgitpp
 {
 
 CredentialsCallback Repository::credentialCallback = nullptr;
+LogCallback Repository::logCallback = nullptr;
 
 Repository::Repository(std::string path):
   path(path),
@@ -260,6 +262,16 @@ bool Repository::commit(const std::string& comment, const Signature* sig)
   return true;
 }
 
+std::unique_ptr<Branch> Repository::getCurrentBranch()
+{
+  auto head = getHead();
+  if (head->isBranch())
+  {
+    return head->asBranch();
+  }
+  return std::unique_ptr<Branch>();
+}
+
 std::vector<std::unique_ptr<Branch>> Repository::getBranches(git_branch_t type)
 {
   std::vector<std::unique_ptr<Branch>> list;
@@ -331,7 +343,7 @@ bool Repository::checkout(const std::string& refish, bool force)
   /**
    * Now that the checkout has completed, we have to update HEAD.
    *
-   * Depending on the "origin" of target (ie. it's an OID or a branch name),
+   * Depending on the "origin" of target (i.e. it's an OID or a branch name),
    * we might need to detach HEAD.
    */
   if (git_annotated_commit_ref(target))
@@ -510,6 +522,12 @@ void Repository::push()
     git_remote_free(remote);
     throw std::runtime_error(err->message);
   }
+  if (logCallback)
+  {
+    std::ostringstream os;
+    os << "pushed " << refspec << " -> " << git_remote_name(remote);
+    logCallback(os.str());
+  }
   free(s);
   git_remote_free(remote);
 }
@@ -523,6 +541,11 @@ git_repository* Repository::raw() const
 void Repository::setCredentialsCallback(const CredentialsCallback& cb)
 {
   credentialCallback = cb;
+}
+
+void Repository::setLoggingCallback(const LogCallback& cb)
+{
+  logCallback = cb;
 }
 
 

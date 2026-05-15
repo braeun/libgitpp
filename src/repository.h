@@ -31,6 +31,11 @@ class Signature;
  */
 typedef std::function<std::vector<std::string>(const std::vector<std::string>&, const std::vector<std::string>&)> CredentialsCallback;
 
+/**
+ * @brief Callback for logging output
+ */
+typedef std::function<void(const std::string&)> LogCallback;
+
 class LIBGITPP_EXPORT Repository
 {
 public:
@@ -58,6 +63,8 @@ public:
 
   bool commit(const std::string& comment, const Signature* sig=nullptr);
 
+  std::unique_ptr<Branch> getCurrentBranch();
+
   std::vector<std::unique_ptr<Branch>> getBranches(git_branch_t type=GIT_BRANCH_ALL);
 
   bool checkout(const std::string& branch, bool force=false);
@@ -70,6 +77,8 @@ public:
 
   static void setCredentialsCallback(const CredentialsCallback& cb);
 
+  static void setLoggingCallback(const LogCallback& cb);
+
 private:
   Repository(std::string path);
   Repository(git_repository* repo);
@@ -81,6 +90,7 @@ private:
   git_repository* repo;
 
   static CredentialsCallback credentialCallback;
+  static LogCallback logCallback;
 };
 
 } // namespace
