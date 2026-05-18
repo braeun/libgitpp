@@ -204,6 +204,12 @@ std::vector<std::string> Repository::add(const std::vector<std::string>& list)
     auto err = git_error_last();
     throw std::runtime_error(err->message);
   }
+  err = git_index_write(index->raw());
+  if (err != GIT_OK)
+  {
+    auto err = git_error_last();
+    throw std::runtime_error(err->message);
+  }
   return data.messages;
 }
 
