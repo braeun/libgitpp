@@ -204,69 +204,65 @@ std::vector<std::string> Repository::add(const std::vector<std::string>& list)
     auto err = git_error_last();
     throw std::runtime_error(err->message);
   }
-  err = git_index_write(index->raw());
-  if (err != GIT_OK)
-  {
-    auto err = git_error_last();
-    throw std::runtime_error(err->message);
-  }
   return data.messages;
 }
 
 bool Repository::commit(const std::string& comment, const Signature* sig)
 {
-  // git_object *parent = nullptr;
-  // git_reference *ref = nullptr;
-  // int err = git_revparse_ext(&parent, &ref, repo, "HEAD");
-  // if (err == GIT_ENOTFOUND)
-  // {
-  //   printf("HEAD not found. Creating first commit\n");
-  //   err = 0;
-  // }
-  // else if (err != 0)
-  // {
-  //   auto err = git_error_last();
-  //   throw std::runtime_error(err->message);
-  // }
-
-  // auto index = getIndex();
-  // git_oid tree_oid = index->writeTree();
-  // index->write();
-  // std::cout << "index count " << index->getCount() << std::endl;
-
-  // git_tree *tree;
-  // err = git_tree_lookup(&tree, repo, &tree_oid);
-  // if (err != GIT_OK)
-  // {
-  //   auto err = git_error_last();
-  //   git_object_free(parent);
-  //   git_reference_free(ref);
-  //   throw std::runtime_error(err->message);
-  // }
-  // std::cout << "tree count " << git_tree_entrycount(tree) << std::endl;
-
   auto signature = getDefaultSignature();
 
+#if  (LIBGIT2_VERSION_NUMBER >= 1080000)
+  auto index = getIndex();
+  index->write();
   git_oid commit_oid;
   git_commit_create_options opt{GIT_COMMIT_CREATE_OPTIONS_VERSION, 0, nullptr, nullptr, nullptr};
   opt.committer = sig?sig->raw():signature->raw();
   opt.author = signature->raw();
   int err = git_commit_create_from_stage(&commit_oid,repo,comment.c_str(),&opt);
+#else
+  git_object *parent = nullptr;
+  git_reference *ref = nullptr;
+  int err = git_revparse_ext(&parent, &ref, repo, "HEAD");
+  if (err == GIT_ENOTFOUND)
+  {
+    if (logCallback) logCallback("HEAD not found. Creating first commit.");
+  }
+  else if (err != 0)
+  {
+    auto err = git_error_last();
+    throw std::runtime_error(err->message);
+  }
 
-  // err = git_commit_create_v(
-  //               &commit_oid,
-  //               repo,
-  //               "HEAD",
-  //               signature->raw(),
-  //               sig?sig->raw():signature->raw(),
-  //               nullptr,
-  //               comment.c_str(),
-  //               tree,
-  //               parent ? 1 : 0, parent);
+  auto index = getIndex();
+  git_oid tree_oid = index->writeTree();
+  index->write();
 
-  // git_tree_free(tree);
-  // git_object_free(parent);
-  // git_reference_free(ref);
+  git_tree *tree;
+  err = git_tree_lookup(&tree, repo, &tree_oid);
+  if (err != GIT_OK)
+  {
+    auto err = git_error_last();
+    git_object_free(parent);
+    git_reference_free(ref);
+    throw std::runtime_error(err->message);
+  }
+  git_oid commit_oid;
+  err = git_commit_create_v(
+                &commit_oid,
+                repo,
+                "HEAD",
+                signature->raw(),
+                sig?sig->raw():signature->raw(),
+                nullptr,
+                comment.c_str(),
+                tree,
+                parent ? 1 : 0, parent);
+
+  git_tree_free(tree);
+  git_object_free(parent);
+  git_reference_free(ref);
+#endif
+
   if (err != GIT_OK)
   {
     auto err = git_error_last();
